@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: backend-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Wait for PostgreSQL to be ready before starting backend
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:latest
+        imagePullPolicy: IfNotPresent
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for PostgreSQL..."
+            until nc -z postgres-0.postgres.db-ns.svc.cluster.local 5432; do
+              echo "Waiting for PostgreSQL..."
+              sleep 2
+            done
+            echo "PostgreSQL is up!"
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+      containers:
+      - name: backend
+        image: mostafakassas55/nti_backend:v1
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        ports:
+        - containerPort: 5000
+        # Load all configuration from ConfigMap and Secret
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secret

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-config
+  namespace: db-ns
+data:
+  # PostgreSQL database name
+  POSTGRES_DB: backend

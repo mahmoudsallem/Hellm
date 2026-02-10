@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "backend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.imageCredentials.enabled }}
+      imagePullSecrets:
+      - name: {{ .Values.imageCredentials.name }}
+      {{- end }}
+      # Wait for PostgreSQL to be ready before starting backend
+      initContainers:
+      - name: wait-for-postgres
+        image: {{ .Values.initContainer.image }}:latest
+        imagePullPolicy: {{ .Values.initContainer.pullPolicy }}
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for PostgreSQL..."
+            # Check Postgres in db-ns
+            until nc -z {{ .Values.config.postgresHost }} {{ .Values.config.postgresPort }}; do
+              echo "Waiting for PostgreSQL..."
+              sleep 2
+            done
+            echo "PostgreSQL is up!"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      containers:
+      - name: backend
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+        # Load all configuration from ConfigMap and Secret
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secret

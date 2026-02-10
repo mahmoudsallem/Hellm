@@ -1,0 +1,57 @@
+# =============================================================================
+# Database Helm Chart - values.yaml
+# =============================================================================
+
+# Namespace configuration
+namespace: db-ns
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Configuration
+# -----------------------------------------------------------------------------
+postgres:
+  replicaCount: 1
+  image:
+    repository: postgres
+    tag: 15-alpine
+    pullPolicy: IfNotPresent
+  # PostgreSQL service port
+  port: 5432
+  # PostgreSQL service name for StatefulSet
+  serviceName: postgres
+  # PostgreSQL database configuration
+  # Database name
+  db: backend
+  # PostgreSQL credentials (will be base64 encoded in secret)
+  user: appuser
+  password: apppass
+  # Persistent storage for PostgreSQL data
+  storage: 1Gi
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+
+
+# -----------------------------------------------------------------------------
+# Network Policy Configuration
+# -----------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  backendNamespace: backend-ns
+
+# Resource Quota
+resourceQuota:
+  enabled: true
+  hard:
+    pods: "10"
+    requests:
+      cpu: "1"
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi

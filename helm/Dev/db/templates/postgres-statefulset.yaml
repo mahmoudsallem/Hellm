@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "db.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Values.postgres.serviceName | quote }}
+  replicas: {{ .Values.postgres.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "db.postgresSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "db.postgresSelectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: postgres
+        image: {{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}
+        imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.postgres.port }}
+        envFrom:
+        - secretRef:
+            name: db-secret
+        - configMapRef:
+            name: db-config
+        resources:
+          {{- toYaml .Values.postgres.resources | nindent 10 }}
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+  # Persistent volume claim for data persistence
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.postgres.storage }}

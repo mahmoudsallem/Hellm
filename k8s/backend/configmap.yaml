@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: backend-ns
+data:
+  # PostgreSQL service hostname (statefulset pod in db-ns namespace)
+  POSTGRES_HOST: postgres-0.postgres.db-ns.svc.cluster.local
+  # PostgreSQL service port
+  POSTGRES_PORT: "5432"
+  # PostgreSQL database name
+  POSTGRES_DB: backend

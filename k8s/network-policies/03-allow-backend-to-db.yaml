@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-db
+  namespace: db-ns
+spec:
+  # Apply to all PostgreSQL pods in db-ns
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from backend pods in backend-ns
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: backend-ns
+      podSelector:
+        matchLabels:
+          app: backend
+    ports:
+    # PostgreSQL port only
+    - protocol: TCP
+      port: 5432

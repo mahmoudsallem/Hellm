@@ -1,0 +1,28 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-db
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "db.labels" . | nindent 4 }}
+spec:
+  # Apply policy to PostgreSQL pods only
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.networkPolicy.backendNamespace }}
+      podSelector:
+        matchLabels:
+          app: backend
+    ports:
+    # PostgreSQL port only
+    - protocol: TCP
+      port: {{ .Values.postgres.port }}
+{{- end }}

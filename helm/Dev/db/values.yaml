@@ -1,0 +1,60 @@
+# =============================================================================
+# Database Helm Chart - values.yaml
+# =============================================================================
+
+# Namespace configuration
+namespace: db-ns
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Configuration
+# -----------------------------------------------------------------------------
+postgres:
+  replicaCount: 1
+  image:
+    repository: postgres
+    tag: 15-alpine
+    pullPolicy: IfNotPresent
+  # PostgreSQL service port
+  port: 5432
+  # PostgreSQL service name for StatefulSet
+  serviceName: postgres
+  # PostgreSQL database configuration
+  # Database name
+  db: backend
+  # PostgreSQL credentials (will be base64 encoded in secret)
+  user: appuser
+  password: apppass
+  # Sealed credentials for SealedSecrets (encrypted with kubeseal)
+  userSealed: AgCc8yOmZjob/8sByRYHyfeRuAgOogj4u0XIAnk1rP2xqJ5Dh26kmrUyJ/Co6vZanqo8QZDje1t2Rz/v4vd6R1XxdqRt92YAA+NsKP+x/phJhazLgh3r9OE1u9Y6ypKnUtR5ViUJakEc8FdGgVSfB8Kd9EBfjxdXuEylGQYxK6pj4jtMwBDaOgF0wWcIUf0/YydMkI8qZKqSKKwacvEd6smNpDAgSnik0wRj8Q0oK9A1xjKK8PIGJdW4sRdISD7tuAWbgpgTHWYrRui1oKoPD3fowjEq0F3BaSaCc4pwukkH8j9XXvwrXTmQzdqcTI2LqR//ld5C1de+eQAumMFGuBpAipJBpnTAS3Vs1ydjSGuw4HLH+SJuONECoqO6i8g7Qilsk3D7tCBs+AckY2TFar6PvnwHuFGKNnY/0iXw3Vp6brC9pRQ8Zqr1bvAlpdx/VUitznx669RjrP/xD8DyxruYa31J02dJur7ABzvAWw2/MEycqiO3iqhAL+eqXtF3CUBmAKOQ9KvCr7Nlcj7BdX+u+axrhK5B8F4WEP/OQ0fPKSuCcAqIV2vBoQOJI9FhmvnbMaTMf1P4IiV7Rk0F2dTdgSkXXGCsOzjKDwMH0/LP/Yb0gD0y48Lhg7T58LhNMfZTQ2JGs2pr889tSgHC384AyLOb+PHZNiajRYo2s9lyrlkmx9H4VeXBEDSX+N1mkssftD9sQ+Ct
+  passwordSealed: AgCenHhzVLaewiozGl6r8ZOGM+STAQB7XIcfNI9aEvAqDsR3E7BlkA+1+OFzDoHxNesoJuxGjNYDFY2WTMwLRll76mfuw+znphk28snFeIj7f+nQcv+1rULZSVEg5+uuVxRGELOACCmJXdisP4kmo/g8Q+qFP5Snc5rvlGPmgZlJday+fpfEDpUjluu/FP19iLLU5wIFOY4c1l+5xiUuA0cuxXtymRJ8V3HOlDMl0L8Z/9Ht6y/eZ0+wlQNSVQgC8uxOOk9cBbsSsQuXnmVqWKysVd3dzAHVTTFD6yXG4HiGTQm0PM2ljV4SRXzpJsqpfcM8oU6eiTO2N7g6bgBgi1JL0vP3JghaWOOT2mpoKu9vZeRb4qqWElPQmGoKQFwctLVMJwrnSMe/psma2NGEw5rAjou8NeimPFvlcAkMRw/nY1W9cjzSy5nMjHw0YL5iL06u/iioG68M4jFluUCak8W7SHX88GbRBqOCC7khnIlAdC/suYYbcTimLaAfAuOFCHRJrJT5b1D9uUfc9UaG8ChJ74EftoFZqlrX60p/VJlGpvFXmgyaSkOep2971M9pk3v7fGUNYaGWE8/SrMNUmvrZXIMlC/suphcdYB+g4IhMJADpC/zVkC/zPe9T0D8S8QLmbm54qFCowc/nUS3fo5ZhszpAN+WdIdCXhYaFfJ+jaQF+mv817ou7VRzdezuo2aRaZh+95AHA
+  # Persistent storage for PostgreSQL data
+  storage: 1Gi
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+
+
+# -----------------------------------------------------------------------------
+# Network Policy Configuration
+# -----------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  backendNamespace: backend-ns
+
+# Resource Quota
+resourceQuota:
+  enabled: true
+  hard:
+    pods: "10"
+    requests:
+      cpu: "1"
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi

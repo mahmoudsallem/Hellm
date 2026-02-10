@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+data:
+  # PostgreSQL service hostname (statefulset pod-0 in db-ns namespace)
+  POSTGRES_HOST: {{ .Values.config.postgresHost | quote }}
+  # PostgreSQL service port
+  POSTGRES_PORT: {{ .Values.config.postgresPort | quote }}
+  # PostgreSQL database name
+  POSTGRES_DB: {{ .Values.config.postgresDb | quote }}

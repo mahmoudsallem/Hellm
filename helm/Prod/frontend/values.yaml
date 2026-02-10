@@ -1,0 +1,87 @@
+# =============================================================================
+# Frontend Helm Chart - values.yaml
+# =============================================================================
+
+# Namespace configuration
+namespace: frontend-ns
+
+# Deployment configuration
+replicaCount: 1
+
+# Docker image configuration
+image:
+  repository: mostafakassas55/nti_frontend  # Docker Hub repository
+  tag: v1  # Image tag
+  pullPolicy: IfNotPresent
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 50
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Container port
+containerPort: 80
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  host: frontend.nti.com
+  path: /
+  pathType: Prefix
+
+# Network Policy configuration
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+
+# =============================================================================
+# TLS Configuration
+# =============================================================================
+# DISABLED: TLS not needed for local Minikube development
+tls:
+  enabled: false  # Set to true if you want to use TLS/HTTPS
+  secretName: frontend-tls-secret
+  # Base64-encoded TLS certificate - only needed if enabled is true
+  crt: ""
+  # Base64-encoded TLS private key - only needed if enabled is true
+  key: ""
+
+# =============================================================================
+# Image Pull Secrets Configuration
+# =============================================================================
+# DISABLED: Images are public on Docker Hub, no credentials needed
+imageCredentials:
+  enabled: false  # Set to true only if using private Docker images
+  name: regcred
+  registry: "https://index.docker.io/v1/"
+  username: "mostafakassas55"
+  password: ""  # Only needed if enabled is true
+  email: "elkassasmostafa29@gmail.com"
+
+# Resource Quota
+resourceQuota:
+  enabled: true
+  hard:
+    pods: "10"
+    requests:
+      cpu: "1"
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
