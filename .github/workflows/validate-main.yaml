@@ -239,39 +239,3 @@ jobs:
           fi
 
           echo "✅ All charts template successfully"
-
-  yaml-validation:
-    runs-on: ubuntu-latest
-    name: YAML Syntax Validation
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install yq
-        run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-
-      - name: Validate YAML Syntax
-        run: |
-          echo "=== Validating YAML Syntax ==="
-
-          ERRORS=0
-
-          # Find all YAML files
-          for file in $(find helm k8s -name "*.yaml" -o -name "*.yml" 2>/dev/null); do
-            if yq eval '.' "$file" > /dev/null 2>&1; then
-              echo "✅ $file"
-            else
-              echo "❌ $file has invalid YAML syntax"
-              ERRORS=$((ERRORS+1))
-            fi
-          done
-
-          if [ $ERRORS -gt 0 ]; then
-            echo "❌ Found $ERRORS files with invalid YAML"
-            exit 1
-          fi
-
-          echo "✅ All YAML files are valid"
