@@ -3,6 +3,7 @@ name: Validate Main Branch PR
 on:
   pull_request:
     branches: [main]
+    types: [opened, ready_for_review]
 
 # Cancel in-progress runs when a new commit is pushed
 concurrency:
