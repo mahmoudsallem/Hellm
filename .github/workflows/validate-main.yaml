@@ -239,3 +239,75 @@ jobs:
           fi
 
           echo "✅ All charts template successfully"
+
+  sync-prod-image-tags:
+    runs-on: ubuntu-latest
+    name: Sync Dev Image Tags to Prod
+    needs: [validate-docker-images]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Copy Image Tags from Dev to Prod
+        run: |
+          echo "=== Syncing Image Tags from Dev to Prod ==="
+
+          # Backend
+          echo "--- Syncing Backend Image Tag ---"
+          DEV_BACKEND_TAG=$(yq '.image.tag' helm/Dev/backend/values.yaml)
+          PROD_BACKEND_TAG=$(yq '.image.tag' helm/Prod/backend/values.yaml)
+          echo "Dev Backend Tag: $DEV_BACKEND_TAG"
+          echo "Prod Backend Tag: $PROD_BACKEND_TAG"
+
+          if [ "$DEV_BACKEND_TAG" != "$PROD_BACKEND_TAG" ]; then
+            yq -i ".image.tag = $DEV_BACKEND_TAG" helm/Prod/backend/values.yaml
+            echo "✅ Updated Prod backend tag to $DEV_BACKEND_TAG"
+          else
+            echo "Tags already match, no update needed"
+          fi
+
+          # Frontend
+          echo ""
+          echo "--- Syncing Frontend Image Tag ---"
+          DEV_FRONTEND_TAG=$(yq '.image.tag' helm/Dev/frontend/values.yaml)
+          PROD_FRONTEND_TAG=$(yq '.image.tag' helm/Prod/frontend/values.yaml)
+          echo "Dev Frontend Tag: $DEV_FRONTEND_TAG"
+          echo "Prod Frontend Tag: $PROD_FRONTEND_TAG"
+
+          if [ "$DEV_FRONTEND_TAG" != "$PROD_FRONTEND_TAG" ]; then
+            yq -i ".image.tag = $DEV_FRONTEND_TAG" helm/Prod/frontend/values.yaml
+            echo "✅ Updated Prod frontend tag to $DEV_FRONTEND_TAG"
+          else
+            echo "Tags already match, no update needed"
+          fi
+
+          echo ""
+          echo "=== Sync Complete ==="
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Check if there are changes to commit
+          if git diff --quiet; then
+            echo "No changes to commit - Prod tags already match Dev"
+          else
+            git add helm/Prod/backend/values.yaml helm/Prod/frontend/values.yaml
+            git commit -m "chore: Sync Prod image tags from Dev
+
+            Automatically updated Prod environment image tags to match Dev.
+
+            Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+            git push
+            echo "✅ Changes committed and pushed"
+          fi
