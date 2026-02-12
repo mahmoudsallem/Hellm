@@ -29,6 +29,7 @@ postgres:
   passwordSealed: AgCenHhzVLaewiozGl6r8ZOGM+STAQB7XIcfNI9aEvAqDsR3E7BlkA+1+OFzDoHxNesoJuxGjNYDFY2WTMwLRll76mfuw+znphk28snFeIj7f+nQcv+1rULZSVEg5+uuVxRGELOACCmJXdisP4kmo/g8Q+qFP5Snc5rvlGPmgZlJday+fpfEDpUjluu/FP19iLLU5wIFOY4c1l+5xiUuA0cuxXtymRJ8V3HOlDMl0L8Z/9Ht6y/eZ0+wlQNSVQgC8uxOOk9cBbsSsQuXnmVqWKysVd3dzAHVTTFD6yXG4HiGTQm0PM2ljV4SRXzpJsqpfcM8oU6eiTO2N7g6bgBgi1JL0vP3JghaWOOT2mpoKu9vZeRb4qqWElPQmGoKQFwctLVMJwrnSMe/psma2NGEw5rAjou8NeimPFvlcAkMRw/nY1W9cjzSy5nMjHw0YL5iL06u/iioG68M4jFluUCak8W7SHX88GbRBqOCC7khnIlAdC/suYYbcTimLaAfAuOFCHRJrJT5b1D9uUfc9UaG8ChJ74EftoFZqlrX60p/VJlGpvFXmgyaSkOep2971M9pk3v7fGUNYaGWE8/SrMNUmvrZXIMlC/suphcdYB+g4IhMJADpC/zVkC/zPe9T0D8S8QLmbm54qFCowc/nUS3fo5ZhszpAN+WdIdCXhYaFfJ+jaQF+mv817ou7VRzdezuo2aRaZh+95AHA
   # Persistent storage for PostgreSQL data
   storage: 1Gi
+  storageClassName: gp2
   # Resource limits
   resources:
     requests:
