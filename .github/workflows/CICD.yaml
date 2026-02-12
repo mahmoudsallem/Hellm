@@ -3,181 +3,130 @@ name: Validate Helm Charts
 on:
   push:
     branches: [dev]
+    paths:
+      - 'helm/**'
+      - '.github/workflows/CICD.yaml'
 
+# Cancel in-progress runs when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HELM_VERSION: v3.13.0
 
 jobs:
+  # ============================================================================
+  # Stage 1: Validate Chart Structure
+  # ============================================================================
   validate-structure:
     runs-on: ubuntu-latest
-    name: Validate Chart Structure
+    name: Validate Structure
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate Dev Backend Chart
+      - name: Install yq
         run: |
-          echo "=== Validating Dev Backend Chart ==="
-
-          # Check values.yaml
-          if [ -f "helm/Dev/backend/values.yaml" ]; then
-            echo "✅ helm/Dev/backend/values.yaml exists"
-          else
-            echo "❌ helm/Dev/backend/values.yaml is missing"
-            exit 1
-          fi
-
-          # Check Chart.yaml
-          if [ -f "helm/Dev/backend/Chart.yaml" ]; then
-            echo "✅ helm/Dev/backend/Chart.yaml exists"
-          else
-            echo "❌ helm/Dev/backend/Chart.yaml is missing"
-            exit 1
-          fi
-
-          # Check templates folder
-          if [ -d "helm/Dev/backend/templates" ]; then
-            echo "✅ helm/Dev/backend/templates/ exists"
-          else
-            echo "❌ helm/Dev/backend/templates/ is missing"
-            exit 1
-          fi
-
-          # Check required templates
-          for template in deployment.yaml service.yaml secret.yaml configmap.yaml; do
-            if [ -f "helm/Dev/backend/templates/$template" ]; then
-              echo "✅ helm/Dev/backend/templates/$template exists"
-            else
-              echo "❌ helm/Dev/backend/templates/$template is missing"
-              exit 1
-            fi
-          done
-
-      - name: Validate Dev DB Chart
-        run: |
-          echo "=== Validating Dev DB Chart ==="
-
-          # Check values.yaml
-          if [ -f "helm/Dev/db/values.yaml" ]; then
-            echo "✅ helm/Dev/db/values.yaml exists"
-          else
-            echo "❌ helm/Dev/db/values.yaml is missing"
-            exit 1
-          fi
-
-          # Check Chart.yaml
-          if [ -f "helm/Dev/db/Chart.yaml" ]; then
-            echo "✅ helm/Dev/db/Chart.yaml exists"
-          else
-            echo "❌ helm/Dev/db/Chart.yaml is missing"
-            exit 1
-          fi
-
-          # Check templates folder
-          if [ -d "helm/Dev/db/templates" ]; then
-            echo "✅ helm/Dev/db/templates/ exists"
-          else
-            echo "❌ helm/Dev/db/templates/ is missing"
-            exit 1
-          fi
-
-          # Check required templates
-          for template in postgres-statefulset.yaml postgres-service.yaml secret.yaml configmap.yaml; do
-            if [ -f "helm/Dev/db/templates/$template" ]; then
-              echo "✅ helm/Dev/db/templates/$template exists"
-            else
-              echo "❌ helm/Dev/db/templates/$template is missing"
-              exit 1
-            fi
-          done
-
-      - name: Validate Dev Frontend Chart
-        run: |
-          echo "=== Validating Dev Frontend Chart ==="
-
-          # Check values.yaml
-          if [ -f "helm/Dev/frontend/values.yaml" ]; then
-            echo "✅ helm/Dev/frontend/values.yaml exists"
-          else
-            echo "❌ helm/Dev/frontend/values.yaml is missing"
-            exit 1
-          fi
-
-          # Check Chart.yaml
-          if [ -f "helm/Dev/frontend/Chart.yaml" ]; then
-            echo "✅ helm/Dev/frontend/Chart.yaml exists"
-          else
-            echo "❌ helm/Dev/frontend/Chart.yaml is missing"
-            exit 1
-          fi
-
-          # Check templates folder
-          if [ -d "helm/Dev/frontend/templates" ]; then
-            echo "✅ helm/Dev/frontend/templates/ exists"
-          else
-            echo "❌ helm/Dev/frontend/templates/ is missing"
-            exit 1
-          fi
-
-          # Check required templates
-          for template in deployment.yaml service.yaml ingress.yaml; do
-            if [ -f "helm/Dev/frontend/templates/$template" ]; then
-              echo "✅ helm/Dev/frontend/templates/$template exists"
-            else
-              echo "❌ helm/Dev/frontend/templates/$template is missing"
-              exit 1
-            fi
-          done
-
-      - name: Validate Prod Charts
-        run: |
-          echo "=== Validating Prod Charts ==="
-
-          for chart in backend db frontend; do
-            echo "--- Checking Prod/$chart ---"
-
-            if [ -f "helm/Prod/$chart/values.yaml" ]; then
-              echo "✅ helm/Prod/$chart/values.yaml exists"
-            else
-              echo "❌ helm/Prod/$chart/values.yaml is missing"
-              exit 1
-            fi
-
-            if [ -f "helm/Prod/$chart/Chart.yaml" ]; then
-              echo "✅ helm/Prod/$chart/Chart.yaml exists"
-            else
-              echo "❌ helm/Prod/$chart/Chart.yaml is missing"
-              exit 1
-            fi
-
-            if [ -d "helm/Prod/$chart/templates" ]; then
-              echo "✅ helm/Prod/$chart/templates/ exists"
-            else
-              echo "❌ helm/Prod/$chart/templates/ is missing"
-              exit 1
-            fi
-          done
-
-      - name: Validate values.yaml syntax
-        run: |
-          echo "=== Validating YAML Syntax ==="
-
-          # Install yq for YAML validation
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
-          # Validate all values.yaml files
-          for file in helm/Dev/*/values.yaml helm/Prod/*/values.yaml; do
+      - name: Validate Chart Structure
+        run: |
+          echo "=== Validating Helm Chart Structure ==="
+          ERRORS=0
+
+          # Define charts and their required templates
+          declare -A CHART_TEMPLATES
+          CHART_TEMPLATES["backend"]="deployment.yaml service.yaml secret.yaml configmap.yaml"
+          CHART_TEMPLATES["db"]="postgres-statefulset.yaml postgres-service.yaml secret.yaml configmap.yaml"
+          CHART_TEMPLATES["frontend"]="deployment.yaml service.yaml ingress.yaml"
+
+          for env in Dev Prod; do
+            for chart in backend db frontend; do
+              echo ""
+              echo "--- Checking $env/$chart ---"
+
+              # Check required files
+              for file in values.yaml Chart.yaml; do
+                if [ -f "helm/$env/$chart/$file" ]; then
+                  echo "  ✅ $file"
+                else
+                  echo "  ❌ $file is MISSING"
+                  ERRORS=$((ERRORS+1))
+                fi
+              done
+
+              # Check templates folder
+              if [ -d "helm/$env/$chart/templates" ]; then
+                echo "  ✅ templates/"
+              else
+                echo "  ❌ templates/ is MISSING"
+                ERRORS=$((ERRORS+1))
+              fi
+
+              # Check _helpers.tpl
+              if [ -f "helm/$env/$chart/templates/_helpers.tpl" ]; then
+                echo "  ✅ templates/_helpers.tpl"
+              else
+                echo "  ❌ templates/_helpers.tpl is MISSING"
+                ERRORS=$((ERRORS+1))
+              fi
+
+              # Check chart-specific templates (Dev only to avoid duplication)
+              if [ "$env" == "Dev" ]; then
+                for template in ${CHART_TEMPLATES[$chart]}; do
+                  if [ -f "helm/$env/$chart/templates/$template" ]; then
+                    echo "  ✅ templates/$template"
+                  else
+                    echo "  ❌ templates/$template is MISSING"
+                    ERRORS=$((ERRORS+1))
+                  fi
+                done
+              fi
+            done
+          done
+
+          echo ""
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Found $ERRORS missing files"
+            exit 1
+          fi
+          echo "✅ All required files exist"
+
+      - name: Validate YAML Syntax
+        run: |
+          echo "=== Validating YAML Syntax ==="
+          ERRORS=0
+
+          for file in helm/Dev/*/values.yaml helm/Prod/*/values.yaml helm/Dev/*/Chart.yaml helm/Prod/*/Chart.yaml; do
             if yq eval '.' "$file" > /dev/null 2>&1; then
-              echo "✅ $file is valid YAML"
+              echo "✅ $file"
             else
-              echo "❌ $file has invalid YAML syntax"
-              exit 1
+              echo "❌ $file - invalid YAML"
+              ERRORS=$((ERRORS+1))
             fi
           done
 
+          if [ $ERRORS -gt 0 ]; then
+            exit 1
+          fi
+          echo "✅ All YAML files are valid"
+
+  # ============================================================================
+  # Stage 2: Helm Lint (runs after structure validation)
+  # ============================================================================
   helm-lint:
     runs-on: ubuntu-latest
     name: Helm Lint
+    needs: [validate-structure]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [Dev, Prod]
+        chart: [backend, db, frontend]
 
     steps:
       - name: Checkout code
@@ -186,29 +135,26 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
-          version: v3.13.0
+          version: ${{ env.HELM_VERSION }}
 
-      - name: Lint Dev Charts
+      - name: Lint ${{ matrix.environment }}/${{ matrix.chart }}
         run: |
-          echo "=== Linting Dev Charts ==="
+          echo "=== Linting ${{ matrix.environment }}/${{ matrix.chart }} ==="
+          helm lint helm/${{ matrix.environment }}/${{ matrix.chart }} --strict
 
-          for chart in backend db frontend; do
-            echo "--- Linting Dev/$chart ---"
-            helm lint helm/Dev/$chart || echo "⚠️ Lint warnings for Dev/$chart"
-          done
-
-      - name: Lint Prod Charts
-        run: |
-          echo "=== Linting Prod Charts ==="
-
-          for chart in backend db frontend; do
-            echo "--- Linting Prod/$chart ---"
-            helm lint helm/Prod/$chart || echo "⚠️ Lint warnings for Prod/$chart"
-          done
-
+  # ============================================================================
+  # Stage 3: Helm Template Validation (runs after lint)
+  # ============================================================================
   helm-template:
     runs-on: ubuntu-latest
-    name: Helm Template Validation
+    name: Helm Template
+    needs: [helm-lint]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [Dev, Prod]
+        chart: [backend, db, frontend]
 
     steps:
       - name: Checkout code
@@ -217,34 +163,113 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
-          version: v3.13.0
+          version: ${{ env.HELM_VERSION }}
 
-      - name: Template Dev Charts
+      - name: Template ${{ matrix.environment }}/${{ matrix.chart }}
         run: |
-          echo "=== Templating Dev Charts ==="
+          echo "=== Templating ${{ matrix.environment }}/${{ matrix.chart }} ==="
+          helm template test helm/${{ matrix.environment }}/${{ matrix.chart }} --debug
 
-          for chart in backend db frontend; do
-            echo "--- Templating Dev/$chart ---"
-            if helm template test helm/Dev/$chart > /dev/null 2>&1; then
-              echo "✅ helm/Dev/$chart templates successfully"
-            else
-              echo "❌ helm/Dev/$chart template failed"
-              helm template test helm/Dev/$chart
-              exit 1
-            fi
-          done
+  # ============================================================================
+  # Stage 4: Validate Docker Images Exist
+  # ============================================================================
+  validate-images:
+    runs-on: ubuntu-latest
+    name: Validate Docker Images
+    needs: [validate-structure]
 
-      - name: Template Prod Charts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yq
         run: |
-          echo "=== Templating Prod Charts ==="
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
 
-          for chart in backend db frontend; do
-            echo "--- Templating Prod/$chart ---"
-            if helm template test helm/Prod/$chart > /dev/null 2>&1; then
-              echo "✅ helm/Prod/$chart templates successfully"
+      - name: Check Docker Images Exist
+        run: |
+          echo "=== Validating Docker Images ==="
+          ERRORS=0
+
+          check_image() {
+            local repo=$1
+            local tag=$2
+            local full_image="$repo:$tag"
+
+            echo -n "  Checking $full_image ... "
+
+            # Determine API URL based on repo type
+            if [[ "$repo" == *"/"* ]]; then
+              api_url="https://hub.docker.com/v2/repositories/$repo/tags/$tag"
             else
-              echo "❌ helm/Prod/$chart template failed"
-              helm template test helm/Prod/$chart
-              exit 1
+              api_url="https://hub.docker.com/v2/repositories/library/$repo/tags/$tag"
             fi
-          done
+
+            response=$(curl -s "$api_url")
+            if echo "$response" | grep -q '"name"'; then
+              echo "✅ exists"
+              return 0
+            else
+              echo "❌ NOT FOUND"
+              return 1
+            fi
+          }
+
+          # Check Backend
+          echo ""
+          echo "--- Backend ---"
+          REPO=$(yq '.image.repository' helm/Dev/backend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/backend/values.yaml)
+          if ! check_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          # Check Frontend
+          echo ""
+          echo "--- Frontend ---"
+          REPO=$(yq '.image.repository' helm/Dev/frontend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/frontend/values.yaml)
+          if ! check_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          # Check Database
+          echo ""
+          echo "--- Database ---"
+          REPO=$(yq '.image.repository' helm/Dev/db/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/db/values.yaml)
+          if ! check_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          echo ""
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Found $ERRORS invalid Docker images"
+            exit 1
+          fi
+          echo "✅ All Docker images are valid"
+
+  # ============================================================================
+  # Final: Summary
+  # ============================================================================
+  ci-success:
+    runs-on: ubuntu-latest
+    name: CI Success
+    needs: [validate-structure, helm-lint, helm-template, validate-images]
+    if: success()
+
+    steps:
+      - name: CI Passed
+        run: |
+          echo "============================================"
+          echo "  ✅ All CI checks passed successfully!"
+          echo "============================================"
+          echo ""
+          echo "  ✓ Chart structure validated"
+          echo "  ✓ YAML syntax validated"
+          echo "  ✓ Helm lint passed"
+          echo "  ✓ Helm template validated"
+          echo "  ✓ Docker images verified"
+          echo ""
+          echo "  Ready to create PR to main branch"
