@@ -1,4 +1,5 @@
 name: Validate Helm Charts
+# CI/CD Pipeline for Helm chart validation and Docker image verification
 
 on:
   push:
@@ -115,12 +116,110 @@ jobs:
           echo "✅ All YAML files are valid"
 
   # ============================================================================
-  # Stage 2: Helm Lint (runs after structure validation)
+  # Stage 2: Validate Docker Images Exist
+  # ============================================================================
+  validate-docker-images:
+    runs-on: ubuntu-latest
+    name: Validate Docker Images
+    needs: [validate-structure]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Check Docker Images Exist
+        run: |
+          echo "=== Validating Dev Docker Images ==="
+          ERRORS=0
+
+          check_ecr_image() {
+            local repo=$1
+            local tag=$2
+
+            echo -n "  Checking $repo:$tag ... "
+
+            # Extract ECR repository name from full URI
+            # e.g., 288378107043.dkr.ecr.us-east-1.amazonaws.com/final/app -> final/app
+            if [[ "$repo" == *".ecr."* ]]; then
+              ecr_repo=$(echo "$repo" | sed 's|.*\.com/||')
+              if aws ecr describe-images --repository-name "$ecr_repo" --image-ids imageTag="$tag" > /dev/null 2>&1; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
+            else
+              # Docker Hub fallback for non-ECR images (e.g., postgres)
+              if [[ "$repo" == *"/"* ]]; then
+                api_url="https://hub.docker.com/v2/repositories/$repo/tags/$tag"
+              else
+                api_url="https://hub.docker.com/v2/repositories/library/$repo/tags/$tag"
+              fi
+              response=$(curl -s "$api_url")
+              if echo "$response" | grep -q '"name"'; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
+            fi
+          }
+
+          # Check Backend
+          echo ""
+          echo "--- Backend ---"
+          REPO=$(yq '.image.repository' helm/Dev/backend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/backend/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          # Check Frontend
+          echo ""
+          echo "--- Frontend ---"
+          REPO=$(yq '.image.repository' helm/Dev/frontend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/frontend/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          # Check Database (uses postgres.image path - Docker Hub)
+          echo ""
+          echo "--- Database ---"
+          REPO=$(yq '.postgres.image.repository' helm/Dev/db/values.yaml)
+          TAG=$(yq '.postgres.image.tag' helm/Dev/db/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          echo ""
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Found $ERRORS invalid Docker images"
+            exit 1
+          fi
+          echo "✅ All Dev Docker images are valid"
+
+  # ============================================================================
+  # Stage 3: Helm Lint (runs after image validation)
   # ============================================================================
   helm-lint:
     runs-on: ubuntu-latest
     name: Helm Lint
-    needs: [validate-structure]
+    needs: [validate-docker-images]
 
     strategy:
       fail-fast: false
@@ -143,7 +242,7 @@ jobs:
           helm lint helm/${{ matrix.environment }}/${{ matrix.chart }} --strict
 
   # ============================================================================
-  # Stage 3: Helm Template Validation (runs after lint)
+  # Stage 4: Helm Template Validation (runs after lint)
   # ============================================================================
   helm-template:
     runs-on: ubuntu-latest
@@ -176,7 +275,7 @@ jobs:
   ci-success:
     runs-on: ubuntu-latest
     name: CI Success
-    needs: [validate-structure, helm-lint, helm-template]
+    needs: [validate-structure, validate-docker-images, helm-lint, helm-template]
     if: success()
 
     steps:
@@ -188,6 +287,7 @@ jobs:
           echo ""
           echo "  ✓ Chart structure validated"
           echo "  ✓ YAML syntax validated"
+          echo "  ✓ Docker images validated"
           echo "  ✓ Helm lint passed"
           echo "  ✓ Helm template validated"
           echo ""
