@@ -11,7 +11,7 @@ replicaCount: 1
 # Docker image configuration
 image:
   repository: mostafakassas55/nti_frontend  # Docker Hub repository
-  tag: "5bc53302032fc9037d9adf46245daf889fa971ae"
+  tag: "266a7b2f5369e84127f5012e9d740927afa56750"
   pullPolicy: IfNotPresent
 
 autoscaling:
