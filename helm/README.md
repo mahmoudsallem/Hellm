@@ -72,3 +72,6 @@ Network policies are enabled by default to enforce the "Zero Trust" model inside
 - **Frontend** can only be accessed via the Ingress Controller.
 - **Backend** can only be accessed by the Frontend pods.
 - **Databases** can only be accessed by the Backend pods.
+
+---
+*Last tested: 2026-02-12*

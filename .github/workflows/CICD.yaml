@@ -1,0 +1,295 @@
+name: Validate Helm Charts
+# CI/CD Pipeline for Helm chart validation and Docker image verification (v4)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'helm/**'
+      - '.github/workflows/CICD.yaml'
+
+# Cancel in-progress runs when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HELM_VERSION: v3.13.0
+
+jobs:
+  # ============================================================================
+  # Stage 1: Validate Chart Structure
+  # ============================================================================
+  validate-structure:
+    runs-on: ubuntu-latest
+    name: Validate Structure
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Validate Chart Structure
+        run: |
+          echo "=== Validating Helm Chart Structure ==="
+          ERRORS=0
+
+          # Define charts and their required templates
+          declare -A CHART_TEMPLATES
+          CHART_TEMPLATES["backend"]="deployment.yaml service.yaml secret.yaml configmap.yaml"
+          CHART_TEMPLATES["db"]="postgres-statefulset.yaml postgres-service.yaml secret.yaml configmap.yaml"
+          CHART_TEMPLATES["frontend"]="deployment.yaml service.yaml ingress.yaml"
+
+          for env in Dev Prod; do
+            for chart in backend db frontend; do
+              echo ""
+              echo "--- Checking $env/$chart ---"
+
+              # Check required files
+              for file in values.yaml Chart.yaml; do
+                if [ -f "helm/$env/$chart/$file" ]; then
+                  echo "  ✅ $file"
+                else
+                  echo "  ❌ $file is MISSING"
+                  ERRORS=$((ERRORS+1))
+                fi
+              done
+
+              # Check templates folder
+              if [ -d "helm/$env/$chart/templates" ]; then
+                echo "  ✅ templates/"
+              else
+                echo "  ❌ templates/ is MISSING"
+                ERRORS=$((ERRORS+1))
+              fi
+
+              # Check _helpers.tpl
+              if [ -f "helm/$env/$chart/templates/_helpers.tpl" ]; then
+                echo "  ✅ templates/_helpers.tpl"
+              else
+                echo "  ❌ templates/_helpers.tpl is MISSING"
+                ERRORS=$((ERRORS+1))
+              fi
+
+              # Check chart-specific templates (Dev only to avoid duplication)
+              if [ "$env" == "Dev" ]; then
+                for template in ${CHART_TEMPLATES[$chart]}; do
+                  if [ -f "helm/$env/$chart/templates/$template" ]; then
+                    echo "  ✅ templates/$template"
+                  else
+                    echo "  ❌ templates/$template is MISSING"
+                    ERRORS=$((ERRORS+1))
+                  fi
+                done
+              fi
+            done
+          done
+
+          echo ""
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Found $ERRORS missing files"
+            exit 1
+          fi
+          echo "✅ All required files exist"
+
+      - name: Validate YAML Syntax
+        run: |
+          echo "=== Validating YAML Syntax ==="
+          ERRORS=0
+
+          for file in helm/Dev/*/values.yaml helm/Prod/*/values.yaml helm/Dev/*/Chart.yaml helm/Prod/*/Chart.yaml; do
+            if yq eval '.' "$file" > /dev/null 2>&1; then
+              echo "✅ $file"
+            else
+              echo "❌ $file - invalid YAML"
+              ERRORS=$((ERRORS+1))
+            fi
+          done
+
+          if [ $ERRORS -gt 0 ]; then
+            exit 1
+          fi
+          echo "✅ All YAML files are valid"
+
+  # ============================================================================
+  # Stage 2: Validate Docker Images Exist
+  # ============================================================================
+  validate-docker-images:
+    runs-on: ubuntu-latest
+    name: Validate Docker Images
+    needs: [validate-structure]
+    environment: ECR_REPOSITORY
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Check Docker Images Exist
+        run: |
+          echo "=== Validating Dev Docker Images ==="
+          ERRORS=0
+
+          check_ecr_image() {
+            local repo=$1
+            local tag=$2
+
+            echo -n "  Checking $repo:$tag ... "
+
+            # Extract ECR repository name from full URI
+            # e.g., 288378107043.dkr.ecr.us-east-1.amazonaws.com/final/app -> final/app
+            if [[ "$repo" == *".ecr."* ]]; then
+              ecr_repo=$(echo "$repo" | sed 's|.*\.com/||')
+              if aws ecr describe-images --repository-name "$ecr_repo" --image-ids imageTag="$tag" > /dev/null 2>&1; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
+            else
+              # Docker Hub fallback for non-ECR images (e.g., postgres)
+              if [[ "$repo" == *"/"* ]]; then
+                api_url="https://hub.docker.com/v2/repositories/$repo/tags/$tag"
+              else
+                api_url="https://hub.docker.com/v2/repositories/library/$repo/tags/$tag"
+              fi
+              response=$(curl -s "$api_url")
+              if echo "$response" | grep -q '"name"'; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
+            fi
+          }
+
+          # Check Backend
+          echo ""
+          echo "--- Backend ---"
+          REPO=$(yq '.image.repository' helm/Dev/backend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/backend/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          # Check Frontend
+          echo ""
+          echo "--- Frontend ---"
+          REPO=$(yq '.image.repository' helm/Dev/frontend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/frontend/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          # Check Database (uses postgres.image path - Docker Hub)
+          echo ""
+          echo "--- Database ---"
+          REPO=$(yq '.postgres.image.repository' helm/Dev/db/values.yaml)
+          TAG=$(yq '.postgres.image.tag' helm/Dev/db/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
+          fi
+
+          echo ""
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Found $ERRORS invalid Docker images"
+            exit 1
+          fi
+          echo "✅ All Dev Docker images are valid"
+
+  # ============================================================================
+  # Stage 3: Helm Lint (runs after image validation)
+  # ============================================================================
+  helm-lint:
+    runs-on: ubuntu-latest
+    name: Helm Lint
+    needs: [validate-docker-images]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [Dev, Prod]
+        chart: [backend, db, frontend]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Lint ${{ matrix.environment }}/${{ matrix.chart }}
+        run: |
+          echo "=== Linting ${{ matrix.environment }}/${{ matrix.chart }} ==="
+          helm lint helm/${{ matrix.environment }}/${{ matrix.chart }} --strict
+
+  # ============================================================================
+  # Stage 4: Helm Template Validation (runs after lint)
+  # ============================================================================
+  helm-template:
+    runs-on: ubuntu-latest
+    name: Helm Template
+    needs: [helm-lint]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [Dev, Prod]
+        chart: [backend, db, frontend]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Template ${{ matrix.environment }}/${{ matrix.chart }}
+        run: |
+          echo "=== Templating ${{ matrix.environment }}/${{ matrix.chart }} ==="
+          helm template test helm/${{ matrix.environment }}/${{ matrix.chart }} --debug
+
+  # ============================================================================
+  # Final: Summary
+  # ============================================================================
+  ci-success:
+    runs-on: ubuntu-latest
+    name: CI Success
+    needs: [validate-structure, validate-docker-images, helm-lint, helm-template]
+    if: success()
+
+    steps:
+      - name: CI Passed
+        run: |
+          echo "============================================"
+          echo "  ✅ All CI checks passed successfully!"
+          echo "============================================"
+          echo ""
+          echo "  ✓ Chart structure validated"
+          echo "  ✓ YAML syntax validated"
+          echo "  ✓ Docker images validated"
+          echo "  ✓ Helm lint passed"
+          echo "  ✓ Helm template validated"
+          echo ""
+          echo "  Ready to create PR to main branch"

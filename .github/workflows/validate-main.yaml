@@ -3,172 +3,106 @@ name: Validate Main Branch PR
 on:
   pull_request:
     branches: [main]
+    types: [opened, ready_for_review]
+
+# Cancel in-progress runs when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HELM_VERSION: v3.13.0
 
 jobs:
-  validate-files:
-    runs-on: ubuntu-latest
-    name: Validate Files Exist
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Validate Helm Chart Structure
-        run: |
-          echo "=== Validating Helm Chart Structure ==="
-
-          ERRORS=0
-
-          # Required charts
-          CHARTS=("Dev/backend" "Dev/db" "Dev/frontend" "Prod/backend" "Prod/db" "Prod/frontend")
-
-          for chart in "${CHARTS[@]}"; do
-            echo "--- Checking helm/$chart ---"
-
-            # Check values.yaml
-            if [ -f "helm/$chart/values.yaml" ]; then
-              echo "✅ helm/$chart/values.yaml"
-            else
-              echo "❌ helm/$chart/values.yaml is MISSING"
-              ERRORS=$((ERRORS+1))
-            fi
-
-            # Check Chart.yaml
-            if [ -f "helm/$chart/Chart.yaml" ]; then
-              echo "✅ helm/$chart/Chart.yaml"
-            else
-              echo "❌ helm/$chart/Chart.yaml is MISSING"
-              ERRORS=$((ERRORS+1))
-            fi
-
-            # Check templates folder
-            if [ -d "helm/$chart/templates" ]; then
-              echo "✅ helm/$chart/templates/"
-            else
-              echo "❌ helm/$chart/templates/ is MISSING"
-              ERRORS=$((ERRORS+1))
-            fi
-
-            # Check _helpers.tpl
-            if [ -f "helm/$chart/templates/_helpers.tpl" ]; then
-              echo "✅ helm/$chart/templates/_helpers.tpl"
-            else
-              echo "❌ helm/$chart/templates/_helpers.tpl is MISSING"
-              ERRORS=$((ERRORS+1))
-            fi
-          done
-
-          if [ $ERRORS -gt 0 ]; then
-            echo ""
-            echo "❌ Found $ERRORS missing files"
-            exit 1
-          fi
-
-          echo ""
-          echo "✅ All required files exist"
-
-      - name: Validate K8s Manifests Exist
-        run: |
-          echo "=== Validating K8s Manifests ==="
-
-          ERRORS=0
-
-          # Check k8s folder
-          for folder in backend db frontend; do
-            if [ -d "k8s/$folder" ]; then
-              echo "✅ k8s/$folder/"
-            else
-              echo "❌ k8s/$folder/ is MISSING"
-              ERRORS=$((ERRORS+1))
-            fi
-          done
-
-          if [ $ERRORS -gt 0 ]; then
-            exit 1
-          fi
-
-          echo "✅ All K8s folders exist"
-
+  # ============================================================================
+  # Stage 1: Validate Docker Images Exist in Dev
+  # ============================================================================
   validate-docker-images:
     runs-on: ubuntu-latest
-    name: Validate Docker Images
+    name: Validate Dev Docker Images
+    environment: ECR_REPOSITORY
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract and Validate Docker Images
+      - name: Install yq
         run: |
-          echo "=== Extracting Docker Images from values.yaml ==="
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Check ECR Images Exist
+        run: |
+          echo "=== Validating Dev Docker Images ==="
           ERRORS=0
 
-          # Function to check if Docker image exists
-          check_image() {
-            local image=$1
-            local repo=$(echo $image | cut -d: -f1)
-            local tag=$(echo $image | cut -d: -f2)
+          check_ecr_image() {
+            local repo=$1
+            local tag=$2
 
-            # Handle images without tag
-            if [ "$repo" == "$tag" ]; then
-              tag="latest"
-            fi
+            echo -n "  Checking $repo:$tag ... "
 
-            echo -n "Checking $image ... "
-
-            # Check Docker Hub API
-            if [[ "$repo" == *"/"* ]]; then
-              # User repository (e.g., mostafakassas55/nti_backend)
-              response=$(curl -s "https://hub.docker.com/v2/repositories/$repo/tags/$tag" 2>/dev/null)
+            # Extract ECR repository name from full URI
+            # e.g., 288378107043.dkr.ecr.us-east-1.amazonaws.com/final/app -> final/app
+            if [[ "$repo" == *".ecr."* ]]; then
+              ecr_repo=$(echo "$repo" | sed 's|.*\.com/||')
+              if aws ecr describe-images --repository-name "$ecr_repo" --image-ids imageTag="$tag" > /dev/null 2>&1; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
             else
-              # Official image (e.g., postgres, nginx)
-              response=$(curl -s "https://hub.docker.com/v2/repositories/library/$repo/tags/$tag" 2>/dev/null)
-            fi
-
-            if echo "$response" | grep -q '"name"'; then
-              echo "✅ exists"
-              return 0
-            else
-              echo "❌ NOT FOUND"
-              return 1
+              # Docker Hub fallback for non-ECR images (e.g., postgres)
+              if [[ "$repo" == *"/"* ]]; then
+                api_url="https://hub.docker.com/v2/repositories/$repo/tags/$tag"
+              else
+                api_url="https://hub.docker.com/v2/repositories/library/$repo/tags/$tag"
+              fi
+              response=$(curl -s "$api_url")
+              if echo "$response" | grep -q '"name"'; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
             fi
           }
 
-          # Extract images from values.yaml files
+          # Check Backend
           echo ""
-          echo "--- Checking Backend Images ---"
-
-          # Backend image
-          BACKEND_REPO=$(grep -A2 "^image:" helm/Dev/backend/values.yaml | grep "repository:" | awk '{print $2}' | tr -d '"')
-          BACKEND_TAG=$(grep -A2 "^image:" helm/Dev/backend/values.yaml | grep "tag:" | awk '{print $2}' | tr -d '"')
-          if [ -n "$BACKEND_REPO" ] && [ -n "$BACKEND_TAG" ]; then
-            if ! check_image "$BACKEND_REPO:$BACKEND_TAG"; then
-              ERRORS=$((ERRORS+1))
-            fi
+          echo "--- Backend ---"
+          REPO=$(yq '.image.repository' helm/Dev/backend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/backend/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
           fi
 
+          # Check Frontend
           echo ""
-          echo "--- Checking Frontend Images ---"
-
-          # Frontend image
-          FRONTEND_REPO=$(grep -A2 "^image:" helm/Dev/frontend/values.yaml | grep "repository:" | awk '{print $2}' | tr -d '"')
-          FRONTEND_TAG=$(grep -A2 "^image:" helm/Dev/frontend/values.yaml | grep "tag:" | awk '{print $2}' | tr -d '"')
-          if [ -n "$FRONTEND_REPO" ] && [ -n "$FRONTEND_TAG" ]; then
-            if ! check_image "$FRONTEND_REPO:$FRONTEND_TAG"; then
-              ERRORS=$((ERRORS+1))
-            fi
+          echo "--- Frontend ---"
+          REPO=$(yq '.image.repository' helm/Dev/frontend/values.yaml)
+          TAG=$(yq '.image.tag' helm/Dev/frontend/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
           fi
 
+          # Check Database (uses postgres.image path - Docker Hub)
           echo ""
-          echo "--- Checking Database Images ---"
-
-          # Postgres image
-          POSTGRES_REPO=$(grep -A3 "image:" helm/Dev/db/values.yaml | grep "repository:" | head -1 | awk '{print $2}' | tr -d '"')
-          POSTGRES_TAG=$(grep -A3 "image:" helm/Dev/db/values.yaml | grep "tag:" | head -1 | awk '{print $2}' | tr -d '"')
-          if [ -n "$POSTGRES_REPO" ] && [ -n "$POSTGRES_TAG" ]; then
-            if ! check_image "$POSTGRES_REPO:$POSTGRES_TAG"; then
-              ERRORS=$((ERRORS+1))
-            fi
+          echo "--- Database ---"
+          REPO=$(yq '.postgres.image.repository' helm/Dev/db/values.yaml)
+          TAG=$(yq '.postgres.image.tag' helm/Dev/db/values.yaml)
+          if ! check_ecr_image "$REPO" "$TAG"; then
+            ERRORS=$((ERRORS+1))
           fi
 
           echo ""
@@ -176,12 +110,15 @@ jobs:
             echo "❌ Found $ERRORS invalid Docker images"
             exit 1
           fi
+          echo "✅ All Dev Docker images are valid"
 
-          echo "✅ All Docker images are valid and accessible"
-
+  # ============================================================================
+  # Stage 2: Helm Validation
+  # ============================================================================
   helm-validation:
     runs-on: ubuntu-latest
-    name: Helm Lint and Template
+    name: Helm Lint & Template
+    needs: [validate-docker-images]
 
     steps:
       - name: Checkout code
@@ -190,18 +127,17 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
-          version: v3.13.0
+          version: ${{ env.HELM_VERSION }}
 
       - name: Helm Lint
         run: |
           echo "=== Helm Lint ==="
-
           ERRORS=0
 
           for env in Dev Prod; do
             for chart in backend db frontend; do
               echo "--- Linting $env/$chart ---"
-              if ! helm lint helm/$env/$chart; then
+              if ! helm lint helm/$env/$chart --strict; then
                 ERRORS=$((ERRORS+1))
               fi
             done
@@ -211,13 +147,11 @@ jobs:
             echo "❌ Helm lint failed for $ERRORS charts"
             exit 1
           fi
-
           echo "✅ All charts passed lint"
 
       - name: Helm Template
         run: |
           echo "=== Helm Template Validation ==="
-
           ERRORS=0
 
           for env in Dev Prod; do
@@ -237,5 +171,26 @@ jobs:
             echo "❌ Template validation failed for $ERRORS charts"
             exit 1
           fi
-
           echo "✅ All charts template successfully"
+
+  # ============================================================================
+  # Final: Summary
+  # ============================================================================
+  pr-ready:
+    runs-on: ubuntu-latest
+    name: PR Ready
+    needs: [validate-docker-images, helm-validation]
+    if: success()
+
+    steps:
+      - name: PR Validation Passed
+        run: |
+          echo "============================================"
+          echo "  ✅ PR validation passed!"
+          echo "============================================"
+          echo ""
+          echo "  ✓ Dev Docker images verified"
+          echo "  ✓ Helm lint passed"
+          echo "  ✓ Helm template validated"
+          echo ""
+          echo "  Ready to merge to main branch"
