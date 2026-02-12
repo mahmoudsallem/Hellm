@@ -47,8 +47,8 @@ dbNamespace: db-ns
 # ConfigMap configuration (app-config)
 # PostgreSQL connection details for the backend application
 config:
-  # PostgreSQL service hostname (statefulset pod-0 in db-ns namespace)
-  postgresHost: postgres-0.postgres.db-ns.svc.cluster.local
+  # RDS PostgreSQL endpoint
+  postgresHost: backend-db.cdy0yems6p2u.eu-west-1.rds.amazonaws.com
   # PostgreSQL service port
   postgresPort: "5432"
   # PostgreSQL database name
@@ -60,7 +60,7 @@ secrets:
   # PostgreSQL database username
   postgresUser: appuser
   # PostgreSQL database password
-  postgresPassword: apppass
+  postgresPassword: apppassword123
   # Sealed credentials for SealedSecrets (encrypted with kubeseal)
   postgresUserSealed: AgCTQjK9wSSLc5kMWUxoB+9/AzVzTG7S8CoedgzHmHIsEd11uw7b0o0+rra08yQHnGGdLCf8HkLyh0vd05b5Qpp+KYGGhNk8z42CV+0HMvrKOTcJW5l65SIllQ/eSPiJWexxueVRYMapBr3YsBsB2C9Ablu7YWS16nIbPgiN7JRvjrq8UVCPwUUGR9/XAkZsD/H2m9ZKJmorfbelfJxOKqlQ3+RNNNoIdrDCGipxA8e96ha14YY101cCDZ7dbq1SE/HAG/G66tZHiQH7hwzCxJIeaUCSZmFyohtkmC3/9I1HAv+5e9UnxHCiqE6rjn3ljRcp8+i5BcSp5iqr6Y2oVcjmLeqQa+eXBMtGajRSqxSJJz7Lr11+6JugfxHdy+4LW0Kuolz6cSq7Rhp9oAQBFTehC0w/wEn1Ezr9xPxUKEv3uq6quKKYK/xd9d0Hh7WyVyzggbgW93Fnlue4oiSN/JDtt+J+WXorSXSvRXEh83pxwg+Wrcmmcl6hD2w7ilgNYWlmaZpkxzq5FSRdM+b4xQMxfXS4NeDL9eezqwPdgMOrAtG75dpHG6/DP2NDMb/ik0/QeiMpKrombNfv7wNaTwKfQgsXqxR9l0RtD7caIDbWVuzDoDyjRY5oZskK0+lErJ1wRco3u3GWpIwhdVkom35jTTjf5SKBwFSY9av14R1PuypEHnyALKxR4ahHZPajUSmGJ9+scr0L
   postgresPasswordSealed: AgBRKCWC48mf54/9LNz34oaSL9L+Aej5vLjAyGfcXnFBCmCAuD6dtb9q2WpKSz/3xNsJTY6jpP1P/zyzJ2fF8604s6QiaqAgXr++1oXDn0yCGqlYEVG2OMl2dZvDy07KOKptmLwsD0W3V0hOFSzz1FkoxibpgVXzvzDAenv1eb1C/Xn7m99uqAjfRDISqQUfuSzEDB/OozHVfDidfts4oJi1vIZJLpfNN2jwdDdngps4/v8Xlssx69/scxXob9EOB1up3033l3q0+UVY4YP48oAExCKBaqiMv7jK1C5N7+US0KT3R0/uHCJ0/K/ds3m05r6K5ePFttEBJRFOX9WWwzzwN4S+8vhUoZzqnfcYEy/rWftQAEmuJ+KuKOdN03R8qs+4T9Nk9d5SAPP94JYB7yn20TIsT0t2nyfjt/FApCrxA8LGbsJWxLrmkoKlX1d56ZZm+p+W1cN37OByDKPTFjomlLXx+KVi9mVKEGFoRr4nV6Dc9qLZYM8AUF4BDjIGCROz3xJLRPMkglVGcPBN0hKRNCS9kMvqiUazeNxGezo5i9TQrf7rkaR1iqsho58+LsmgzAA08BDLPlvwYC7KFPdZUK1tLySrEDruDum6Uv9uPZ5EgzCWa/Psn1GRbiiZSE7RUTsEuOiOjxeM6Xvfa+9Ckw2IF7IIbyoohlckgH4bllXjOT2Zjj+5zvJlvIjh/t9en/32qimV
