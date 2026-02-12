@@ -10,8 +10,8 @@ replicaCount: 1
 
 # Docker image configuration
 image:
-  repository: 288378107043.dkr.ecr.us-east-1.amazonaws.com/final/app  # Amazon ECR repository
-  tag: "574c877"
+  repository: ""
+  tag: "cebe560"
   pullPolicy: Always
 
 autoscaling:
