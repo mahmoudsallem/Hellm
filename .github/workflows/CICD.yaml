@@ -1,5 +1,5 @@
 name: Validate Helm Charts
-# CI/CD Pipeline for Helm chart validation and Docker image verification
+# CI/CD Pipeline for Helm chart validation and Docker image verification (v2)
 
 on:
   push:
