@@ -11,7 +11,7 @@ replicaCount: 1
 # Docker image configuration
 image:
   repository: 288378107043.dkr.ecr.us-east-1.amazonaws.com/final/backend  # Amazon ECR repository
-  tag: "44c1c2e"
+  tag: "latest"
   pullPolicy: Always
 
 autoscaling:
