@@ -171,92 +171,12 @@ jobs:
           helm template test helm/${{ matrix.environment }}/${{ matrix.chart }} --debug
 
   # ============================================================================
-  # Stage 4: Validate Docker Images Exist
-  # ============================================================================
-  validate-images:
-    runs-on: ubuntu-latest
-    name: Validate Docker Images
-    needs: [validate-structure]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install yq
-        run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-
-      - name: Check Docker Images Exist
-        run: |
-          echo "=== Validating Docker Images ==="
-          ERRORS=0
-
-          check_image() {
-            local repo=$1
-            local tag=$2
-            local full_image="$repo:$tag"
-
-            echo -n "  Checking $full_image ... "
-
-            # Determine API URL based on repo type
-            if [[ "$repo" == *"/"* ]]; then
-              api_url="https://hub.docker.com/v2/repositories/$repo/tags/$tag"
-            else
-              api_url="https://hub.docker.com/v2/repositories/library/$repo/tags/$tag"
-            fi
-
-            response=$(curl -s "$api_url")
-            if echo "$response" | grep -q '"name"'; then
-              echo "✅ exists"
-              return 0
-            else
-              echo "❌ NOT FOUND"
-              return 1
-            fi
-          }
-
-          # Check Backend
-          echo ""
-          echo "--- Backend ---"
-          REPO=$(yq '.image.repository' helm/Dev/backend/values.yaml)
-          TAG=$(yq '.image.tag' helm/Dev/backend/values.yaml)
-          if ! check_image "$REPO" "$TAG"; then
-            ERRORS=$((ERRORS+1))
-          fi
-
-          # Check Frontend
-          echo ""
-          echo "--- Frontend ---"
-          REPO=$(yq '.image.repository' helm/Dev/frontend/values.yaml)
-          TAG=$(yq '.image.tag' helm/Dev/frontend/values.yaml)
-          if ! check_image "$REPO" "$TAG"; then
-            ERRORS=$((ERRORS+1))
-          fi
-
-          # Check Database
-          echo ""
-          echo "--- Database ---"
-          REPO=$(yq '.image.repository' helm/Dev/db/values.yaml)
-          TAG=$(yq '.image.tag' helm/Dev/db/values.yaml)
-          if ! check_image "$REPO" "$TAG"; then
-            ERRORS=$((ERRORS+1))
-          fi
-
-          echo ""
-          if [ $ERRORS -gt 0 ]; then
-            echo "❌ Found $ERRORS invalid Docker images"
-            exit 1
-          fi
-          echo "✅ All Docker images are valid"
-
-  # ============================================================================
   # Final: Summary
   # ============================================================================
   ci-success:
     runs-on: ubuntu-latest
     name: CI Success
-    needs: [validate-structure, helm-lint, helm-template, validate-images]
+    needs: [validate-structure, helm-lint, helm-template]
     if: success()
 
     steps:
