@@ -12,3 +12,5 @@ data:
   POSTGRES_PORT: {{ .Values.config.postgresPort | quote }}
   # PostgreSQL database name
   POSTGRES_DB: {{ .Values.config.postgresDb | quote }}
+  # CSRF Protection - disable for API-only usage
+  WTF_CSRF_ENABLED: {{ .Values.config.csrfEnabled | default "True" | quote }}

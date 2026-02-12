@@ -53,6 +53,8 @@ config:
   postgresPort: "5432"
   # PostgreSQL database name
   postgresDb: backend
+  # CSRF Protection - set to False for API-only usage
+  csrfEnabled: "False"
 
 # Secret configuration (app-secret)
 # PostgreSQL credentials - will be base64 encoded automatically by Helm
