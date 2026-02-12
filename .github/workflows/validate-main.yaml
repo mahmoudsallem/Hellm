@@ -19,6 +19,7 @@ jobs:
   validate-docker-images:
     runs-on: ubuntu-latest
     name: Validate Dev Docker Images
+    environment: ECR_REPOSITORY
 
     steps:
       - name: Checkout code
