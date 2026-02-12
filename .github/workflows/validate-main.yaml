@@ -148,7 +148,7 @@ jobs:
             echo "  Prod tag: $PROD_TAG"
 
             if [ "$DEV_TAG" != "$PROD_TAG" ]; then
-              yq -i ".image.tag = $DEV_TAG" helm/Prod/$chart/values.yaml
+              yq -i ".image.tag = \"$DEV_TAG\"" helm/Prod/$chart/values.yaml
               echo "  ✅ Updated Prod $chart tag to $DEV_TAG"
               CHANGES=$((CHANGES+1))
             else
