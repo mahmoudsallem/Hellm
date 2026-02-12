@@ -10,9 +10,9 @@ replicaCount: 1
 
 # Docker image configuration
 image:
-  repository: mostafakassas55/nti_backend  # Docker Hub repository
-  tag: v1  # Image tag
-  pullPolicy: IfNotPresent
+  repository: 288378107043.dkr.ecr.us-east-1.amazonaws.com/final/app  # Amazon ECR repository
+  tag: "latest"
+  pullPolicy: Always
 
 autoscaling:
   enabled: true

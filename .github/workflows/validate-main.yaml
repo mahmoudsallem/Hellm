@@ -29,31 +29,50 @@ jobs:
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
-      - name: Check Docker Images Exist
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Check ECR Images Exist
         run: |
           echo "=== Validating Dev Docker Images ==="
           ERRORS=0
 
-          check_image() {
+          check_ecr_image() {
             local repo=$1
             local tag=$2
-            local full_image="$repo:$tag"
 
-            echo -n "  Checking $full_image ... "
+            echo -n "  Checking $repo:$tag ... "
 
-            if [[ "$repo" == *"/"* ]]; then
-              api_url="https://hub.docker.com/v2/repositories/$repo/tags/$tag"
+            # Extract ECR repository name from full URI
+            # e.g., 288378107043.dkr.ecr.us-east-1.amazonaws.com/final/app -> final/app
+            if [[ "$repo" == *".ecr."* ]]; then
+              ecr_repo=$(echo "$repo" | sed 's|.*\.com/||')
+              if aws ecr describe-images --repository-name "$ecr_repo" --image-ids imageTag="$tag" > /dev/null 2>&1; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
             else
-              api_url="https://hub.docker.com/v2/repositories/library/$repo/tags/$tag"
-            fi
-
-            response=$(curl -s "$api_url")
-            if echo "$response" | grep -q '"name"'; then
-              echo "✅ exists"
-              return 0
-            else
-              echo "❌ NOT FOUND"
-              return 1
+              # Docker Hub fallback for non-ECR images (e.g., postgres)
+              if [[ "$repo" == *"/"* ]]; then
+                api_url="https://hub.docker.com/v2/repositories/$repo/tags/$tag"
+              else
+                api_url="https://hub.docker.com/v2/repositories/library/$repo/tags/$tag"
+              fi
+              response=$(curl -s "$api_url")
+              if echo "$response" | grep -q '"name"'; then
+                echo "✅ exists"
+                return 0
+              else
+                echo "❌ NOT FOUND"
+                return 1
+              fi
             fi
           }
 
@@ -62,7 +81,7 @@ jobs:
           echo "--- Backend ---"
           REPO=$(yq '.image.repository' helm/Dev/backend/values.yaml)
           TAG=$(yq '.image.tag' helm/Dev/backend/values.yaml)
-          if ! check_image "$REPO" "$TAG"; then
+          if ! check_ecr_image "$REPO" "$TAG"; then
             ERRORS=$((ERRORS+1))
           fi
 
@@ -71,16 +90,16 @@ jobs:
           echo "--- Frontend ---"
           REPO=$(yq '.image.repository' helm/Dev/frontend/values.yaml)
           TAG=$(yq '.image.tag' helm/Dev/frontend/values.yaml)
-          if ! check_image "$REPO" "$TAG"; then
+          if ! check_ecr_image "$REPO" "$TAG"; then
             ERRORS=$((ERRORS+1))
           fi
 
-          # Check Database (uses postgres.image path)
+          # Check Database (uses postgres.image path - Docker Hub)
           echo ""
           echo "--- Database ---"
           REPO=$(yq '.postgres.image.repository' helm/Dev/db/values.yaml)
           TAG=$(yq '.postgres.image.tag' helm/Dev/db/values.yaml)
-          if ! check_image "$REPO" "$TAG"; then
+          if ! check_ecr_image "$REPO" "$TAG"; then
             ERRORS=$((ERRORS+1))
           fi
 
