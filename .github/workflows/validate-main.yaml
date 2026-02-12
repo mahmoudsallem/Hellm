@@ -75,11 +75,11 @@ jobs:
             ERRORS=$((ERRORS+1))
           fi
 
-          # Check Database
+          # Check Database (uses postgres.image path)
           echo ""
           echo "--- Database ---"
-          REPO=$(yq '.image.repository' helm/Dev/db/values.yaml)
-          TAG=$(yq '.image.tag' helm/Dev/db/values.yaml)
+          REPO=$(yq '.postgres.image.repository' helm/Dev/db/values.yaml)
+          TAG=$(yq '.postgres.image.tag' helm/Dev/db/values.yaml)
           if ! check_image "$REPO" "$TAG"; then
             ERRORS=$((ERRORS+1))
           fi
