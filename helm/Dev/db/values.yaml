@@ -12,7 +12,7 @@ postgres:
   replicaCount: 1
   image:
     repository: postgres
-    tag: "5bc53302032fc9037d9adf46245daf889fa971ae"
+    tag: 15-alpine
     pullPolicy: IfNotPresent
   # PostgreSQL service port
   port: 5432
