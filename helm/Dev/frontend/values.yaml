@@ -64,14 +64,14 @@ tls:
 # =============================================================================
 # Image Pull Secrets Configuration
 # =============================================================================
-# DISABLED: Images are public on Docker Hub, no credentials needed
+# ECR Authentication - Generate token with: aws ecr get-login-password --region us-east-1
 imageCredentials:
-  enabled: false  # Set to true only if using private Docker images
-  name: regcred
-  registry: "https://index.docker.io/v1/"
-  username: "mostafakassas55"
-  password: ""  # Only needed if enabled is true
-  email: "elkassasmostafa29@gmail.com"
+  enabled: true
+  name: ecr-regcred
+  registry: "https://288378107043.dkr.ecr.us-east-1.amazonaws.com"
+  username: "AWS"
+  password: ""  # Set via: aws ecr get-login-password --region us-east-1
+  email: ""
 
 # Resource Quota
 resourceQuota:
