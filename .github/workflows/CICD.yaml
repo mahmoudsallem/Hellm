@@ -190,6 +190,5 @@ jobs:
           echo "  ✓ YAML syntax validated"
           echo "  ✓ Helm lint passed"
           echo "  ✓ Helm template validated"
-          echo "  ✓ Docker images verified"
           echo ""
           echo "  Ready to create PR to main branch"
